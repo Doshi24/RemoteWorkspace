@@ -1,46 +1,55 @@
-import http from 'http'
-import express from 'express'
-import cors from 'cors'
-import { Server, LobbyRoom } from 'colyseus'
-import { monitor } from '@colyseus/monitor'
-import { RoomType } from '../types/Rooms'
+import http from "http";
+import express from "express";
+import cors from "cors";
+import { Server, LobbyRoom } from "colyseus";
+import { monitor } from "@colyseus/monitor";
+import { RoomType } from "../types/Rooms";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
+import authRoutes from "./auth/authRoutes";
 
-// import socialRoutes from "@colyseus/social/express"
+// Import custom rooms
+import { RemoteWorkspace } from "./rooms/RemoteWorkspace";
 
-import { RemoteWorkspace } from './rooms/RemoteWorkspace'
+// Load environment variables
+dotenv.config();
 
-const port = Number(process.env.PORT || 2567)
-const app = express()
+const app = express();
+const port = Number(process.env.PORT) || 2567;
 
-app.use(cors())
-app.use(express.json())
-// app.use(express.static('dist'))
+// Middleware setup
+app.use(cors());
+app.use(express.json());
 
-const server = http.createServer(app)
-const gameServer = new Server({
-  server,
-})
+// Create HTTP server
+const server = http.createServer(app);
 
-// register room handlers
-gameServer.define(RoomType.LOBBY, LobbyRoom)
+// Initialize Colyseus game server
+const gameServer = new Server({ server });
+
+// MongoDB connection
+mongoose
+  .connect(process.env.MONGO_URI as string)
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.log("MongoDB Connection Error:", err));
+
+// Authentication routes
+app.use("/api/auth", authRoutes);
+
+// Register Colyseus rooms
+gameServer.define(RoomType.LOBBY, LobbyRoom);
 gameServer.define(RoomType.PUBLIC, RemoteWorkspace, {
-  name: 'Public Lobby',
-  description: 'For making friends and familiarizing yourself with the controls',
+  name: "Public Lobby",
+  description: "For making friends and familiarizing yourself with the controls",
   password: null,
   autoDispose: false,
-})
-gameServer.define(RoomType.CUSTOM, RemoteWorkspace).enableRealtimeListing()
+});
+gameServer.define(RoomType.CUSTOM, RemoteWorkspace).enableRealtimeListing();
 
-/**
- * Register @colyseus/social routes
- *
- * - uncomment if you want to use default authentication (https://docs.colyseus.io/server/authentication/)
- * - also uncomment the import statement
- */
-// app.use("/", socialRoutes);
+// Colyseus monitor (for debugging/admin)
+app.use("/colyseus", monitor());
 
-// register colyseus monitor AFTER registering your room handlers
-app.use('/colyseus', monitor())
-
-gameServer.listen(port)
-console.log(`Listening on ws://localhost:${port}`)
+// Start the server
+server.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+});
